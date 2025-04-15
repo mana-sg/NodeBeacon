@@ -182,3 +182,233 @@
   }
 }
 
+
+/* ... other styles ... */
+
+.App-header {
+  /* ... existing styles ... */
+  padding: 15px 20px; /* Adjust padding */
+}
+
+.status-section {
+  display: flex;
+  gap: 20px; /* Space between connection and stream status */
+  margin-top: 10px; /* Space below title */
+  font-size: 0.9em;
+}
+
+.status-indicator {
+  padding: 5px 10px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.status-indicator.connected {
+  color: #2e7d32; /* Darker green */
+  background-color: #e8f5e9; /* Light green background */
+}
+
+.status-indicator.disconnected {
+  color: #d32f2f; /* Darker red */
+  background-color: #ffebee; /* Light red background */
+}
+
+/* Added for Streaming Status */
+.status-indicator.streaming {
+  color: #0277bd; /* Darker blue */
+  background-color: #e1f5fe; /* Light blue background */
+}
+
+.status-indicator.stopped {
+   color: #5f6368; /* Grey */
+   background-color: #f1f3f4; /* Light grey background */
+}
+
+.error-message {
+  color: #d32f2f; /* Darker red */
+  background-color: #ffebee; /* Light red background */
+  padding: 8px 15px;
+  border-radius: 4px;
+  margin-top: 10px;
+  font-size: 0.9em;
+  border: 1px solid #ef9a9a;
+}
+
+
+.video-container {
+  /* ... existing styles ... */
+   display: flex; /* Use flexbox for header layout */
+   flex-direction: column; /* Stack header and image vertically */
+}
+
+.video-header {
+   display: flex;
+   justify-content: space-between; /* Puts title left, controls right */
+   align-items: center; /* Vertically align items */
+   margin-bottom: 10px; /* Space below header */
+   flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.video-header h2 {
+    margin: 0; /* Remove default margin */
+}
+
+.stream-controls {
+  display: flex;
+  gap: 10px; /* Space between buttons */
+}
+
+.stream-controls button {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s ease;
+}
+
+.stream-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Style Start Button */
+.stream-controls button:first-of-type {
+  background-color: #4CAF50; /* Green */
+  color: white;
+}
+.stream-controls button:first-of-type:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+/* Style Stop Button */
+.stream-controls button:last-of-type {
+  background-color: #f44336; /* Red */
+  color: white;
+}
+.stream-controls button:last-of-type:hover:not(:disabled) {
+  background-color: #da190b;
+}
+
+.placeholder {
+  /* ... existing styles ... */
+  min-height: 300px; /* Ensure placeholder has some height */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.chat-messages {
+  height: 400px; /* Or adjust as needed */
+  /* ... other styles ... */
+}
+
+/* ... existing styles ... */
+
+.navigation-bar {
+  background-color: #282c34; /* Dark background */
+  padding: 10px 20px;
+  display: flex;
+  gap: 20px; /* Space between links */
+  border-bottom: 1px solid #444; /* Separator */
+}
+
+.navigation-bar a {
+  color: #61dafb; /* React blue */
+  text-decoration: none;
+  font-weight: bold;
+  padding: 5px 10px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.navigation-bar a:hover {
+  background-color: #40454f; /* Slightly lighter background on hover */
+}
+
+/* Add padding to page content if nav is fixed or sticky */
+.page-container {
+   /* Add padding-top if your nav bar is fixed/sticky */
+   /* padding-top: 60px; */ /* Adjust height based on your nav bar */
+   /* For now, just use it as a general wrapper */
+}
+
+/* Adjust header within pages if needed */
+.page-container .App-header {
+   /* Maybe remove top margin if nav bar is present */
+   margin-top: 0;
+   border-radius: 0; /* Remove rounding if it looks odd with nav */
+}
+
+/* Ensure main content layout works */
+.main-content {
+    display: flex;
+    flex-direction: row; /* Side-by-side video and chat */
+    padding: 20px;
+    gap: 20px; /* Space between video and chat */
+    align-items: flex-start; /* Align tops */
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.video-container {
+    flex: 2; /* Video takes more space */
+    min-width: 300px; /* Minimum width before wrapping */
+    /* display: flex; // Already added before */
+    /* flex-direction: column; // Already added before */
+}
+
+.chat-container {
+    flex: 1; /* Chat takes less space */
+    min-width: 250px; /* Minimum width */
+    /* Styles from before should apply */
+}
+
+.video-container-inner img {
+  max-width: 100%; /* Ensure image is responsive */
+  height: auto;
+  border: 1px solid #ccc;
+  background-color: #000; /* Black background while loading/if transparent */
+}
+
+.video-container-inner .placeholder {
+    /* Styles from before should apply */
+    border: 1px dashed #ccc;
+}
+
+/* ... existing styles ... */
+
+.video-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 15px; /* Add gap for spacing */
+}
+
+.video-header h2 {
+   margin: 0;
+   flex-shrink: 0; /* Prevent title from shrinking too much */
+}
+
+.stream-info {
+ display: flex;
+ gap: 15px; /* Space between latency and FPS */
+ font-size: 0.9em;
+ color: #ccc; /* Lighter text color */
+ flex-shrink: 0; /* Prevent info from shrinking */
+}
+
+.stream-info p {
+ margin: 0; /* Remove default paragraph margin */
+ background-color: rgba(0, 0, 0, 0.3); /* Slight dark background */
+ padding: 3px 8px;
+ border-radius: 4px;
+}
+
+/* Ensure stream controls (if present) are handled */
+.stream-controls {
+ /* Styles from before */
+ flex-shrink: 0;
+}
