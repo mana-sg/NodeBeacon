@@ -1,0 +1,11 @@
+Flask
+Flask-SocketIO
+Flask-Cors
+kafka-python
+numpy
+opencv-python-headless  # Use headless if not displaying frames on backend
+python-dotenv           # For loading .env file (optional)
+# eventlet or gevent might be needed for production deployment instead of Flask dev server
+# e.g., uncomment one:
+# eventlet
+# gevent
