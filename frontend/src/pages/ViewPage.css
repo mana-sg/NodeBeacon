@@ -1,0 +1,168 @@
+/* frontend/src/pages/ViewPage.css */
+.view-page {
+    padding: 15px;
+  }
+  
+  .view-page h2 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 15px;
+  }
+  
+  .status-section {
+    text-align: center;
+    margin-bottom: 15px;
+    font-size: 0.9em;
+    color: #555;
+  }
+  .status-section p {
+      margin: 5px 0;
+  }
+  
+  .status-ok {
+    color: green;
+    font-weight: bold;
+  }
+  
+  .status-error {
+    color: red;
+    font-weight: bold;
+  }
+  .status-warn {
+      color: orange;
+      font-weight: bold;
+  }
+  
+  .error-message {
+    color: red;
+    background-color: #ffe0e0;
+    border: 1px solid red;
+    padding: 8px;
+    border-radius: 4px;
+    margin-top: 10px;
+    display: inline-block; /* Make it wrap content */
+  }
+  
+  
+  .main-content {
+    display: flex;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+    gap: 20px;
+    justify-content: center;
+    align-items: flex-start; /* Align items at the top */
+  }
+  
+  .video-display {
+    flex: 2; /* Take more space */
+    min-width: 300px; /* Minimum width */
+    max-width: 720px; /* Maximum reasonable width */
+    border: 1px solid #ddd;
+    background-color: #222; /* Dark background for video area */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative; /* For potential overlays */
+  }
+  
+  .video-display img {
+    display: block;
+    max-width: 100%;
+    height: auto; /* Maintain aspect ratio */
+  }
+  
+  .video-placeholder {
+      color: #ccc;
+      font-size: 1.2em;
+      padding: 50px;
+  }
+  
+  
+  .chat-window {
+    flex: 1; /* Take less space */
+    min-width: 250px;
+    max-width: 400px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #f8f8f8;
+    display: flex;
+    flex-direction: column;
+    height: 500px; /* Fixed height for chat */
+  }
+  
+  .chat-window h4 {
+      text-align: center;
+      margin: 0;
+      padding: 10px;
+      background-color: #eee;
+      border-bottom: 1px solid #ccc;
+      border-top-left-radius: 5px;
+      border-top-right-radius: 5px;
+  }
+  
+  .chat-messages {
+    flex-grow: 1; /* Take available space */
+    overflow-y: auto; /* Enable scrolling */
+    padding: 10px;
+    background-color: #fff;
+  }
+  .no-messages {
+      color: #888;
+      text-align: center;
+      margin-top: 20px;
+      font-style: italic;
+  }
+  
+  .chat-message {
+    margin-bottom: 8px;
+    font-size: 0.95em;
+    line-height: 1.4;
+  }
+  
+  .chat-message .sender {
+    font-weight: bold;
+    color: #007bff; /* Example sender color */
+    margin-right: 5px;
+  }
+  .chat-message .text {
+      word-break: break-word; /* Wrap long words */
+  }
+  
+  .chat-message .timestamp {
+    font-size: 0.8em;
+    color: #888;
+    margin-left: 8px;
+  }
+  
+  .chat-input {
+    display: flex;
+    padding: 10px;
+    border-top: 1px solid #ccc;
+    background-color: #f0f0f0;
+  }
+  
+  .chat-input input {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    margin-right: 8px;
+  }
+  
+  .chat-input button {
+    padding: 8px 15px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .chat-input button:hover {
+    background-color: #0056b3;
+  }
+  
+  .info-section {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 0.85em;
+      color: #777;
+  }

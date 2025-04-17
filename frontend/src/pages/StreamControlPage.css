@@ -1,0 +1,89 @@
+/* frontend/src/pages/StreamControlPage.css */
+.stream-control-page {
+    padding: 20px;
+    max-width: 600px;
+    margin: 20px auto;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+  }
+  
+  .stream-control-page h2 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+  }
+  
+  .status-section p, .info-section p {
+    margin: 8px 0;
+    font-size: 0.95em;
+  }
+  
+  .status-ok {
+    color: green;
+    font-weight: bold;
+  }
+  
+  .status-error {
+    color: red;
+    font-weight: bold;
+  }
+  .status-warn {
+      color: orange;
+      font-weight: bold;
+  }
+  
+  .error-message {
+    color: red;
+    background-color: #ffe0e0;
+    border: 1px solid red;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 15px;
+  }
+  
+  .controls-section {
+    margin-top: 25px;
+    display: flex;
+    justify-content: center;
+    gap: 20px; /* Spacing between buttons */
+  }
+  
+  .controls-section button {
+    padding: 12px 25px;
+    font-size: 1em;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    transition: background-color 0.2s ease;
+  }
+  
+  .controls-section button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  
+  /* Style specific buttons */
+  .controls-section button:first-of-type { /* Start Button */
+    background-color: #4CAF50; /* Green */
+    color: white;
+  }
+  .controls-section button:first-of-type:hover:not(:disabled) {
+    background-color: #45a049;
+  }
+  
+  .controls-section button:last-of-type { /* Stop Button */
+    background-color: #f44336; /* Red */
+    color: white;
+  }
+  .controls-section button:last-of-type:hover:not(:disabled) {
+    background-color: #da190b;
+  }
+  
+  .info-section {
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px dashed #ddd;
+      color: #555;
+      font-size: 0.9em;
+  }
