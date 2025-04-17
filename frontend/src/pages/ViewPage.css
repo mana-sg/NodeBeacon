@@ -166,3 +166,179 @@
       font-size: 0.85em;
       color: #777;
   }
+
+  /* Add to App.css or a new ViewPage.css and import it */
+
+.view-page-container {
+    display: flex;
+    flex-direction: column;
+    padding: 15px;
+    height: calc(100vh - 80px); /* Adjust based on nav bar height */
+    box-sizing: border-box;
+  }
+  
+  .status-bar {
+    background-color: #eee;
+    padding: 8px 15px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: #333;
+  }
+  
+  .content-area {
+    display: flex;
+    flex-grow: 1; /* Allow content to fill available space */
+    gap: 20px; /* Space between video and chat */
+    overflow: hidden; /* Prevent content overflow */
+  }
+  
+  .video-container {
+    flex: 3; /* Video takes more space */
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    overflow: hidden; /* Contained video */
+  }
+  
+  .video-container h2 {
+    margin-top: 0;
+    text-align: center;
+    color: #555;
+  }
+  
+  .video-container img {
+    max-width: 100%;
+    height: auto; /* Maintain aspect ratio */
+    max-height: calc(100% - 40px); /* Limit height within container */
+    display: block;
+    margin: 0 auto;
+    background-color: #ddd; /* BG while loading */
+  }
+  
+  .video-container .placeholder {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #e0e0e0;
+    color: #666;
+    font-size: 1.2em;
+    min-height: 200px; /* Ensure placeholder has size */
+    border-radius: 4px;
+  }
+  
+  .chat-container {
+    flex: 1; /* Chat takes less space */
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    overflow: hidden; /* Contain chat elements */
+    min-width: 250px; /* Ensure chat has a minimum width */
+  }
+  
+  .chat-container h2 {
+    margin-top: 0;
+    text-align: center;
+    color: #555;
+    margin-bottom: 10px;
+  }
+  
+  .chat-messages {
+    flex-grow: 1; /* Allow message area to expand */
+    overflow-y: auto; /* Enable scrolling */
+    border: 1px solid #eee;
+    background-color: #fff;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+  
+  .chat-message {
+    margin-bottom: 6px;
+    font-size: 0.95em;
+    word-wrap: break-word; /* Wrap long messages */
+  }
+  
+  .chat-message .sender {
+    font-weight: bold;
+    color: #007bff; /* Example color */
+    margin-right: 5px;
+  }
+  
+  .chat-message .text {
+    color: #333;
+  }
+  
+  .chat-input-form {
+    display: flex;
+  }
+  
+  .chat-input-form input[type="text"] {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px 0 0 4px;
+  }
+  
+  .chat-input-form button {
+    padding: 8px 15px;
+    border: 1px solid #007bff;
+    background-color: #007bff;
+    color: white;
+    border-radius: 0 4px 4px 0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .chat-input-form button:hover {
+    background-color: #0056b3;
+  }
+  
+  .chat-input-form input:disabled,
+  .chat-input-form button:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+    border-color: #ced4da;
+  }
+  .chat-input-form button:disabled {
+    background-color: #adb5bd;
+     border-color: #adb5bd;
+  }
+  
+  .chat-error-display {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #f8d7da;
+      color: #721c24;
+      padding: 10px 20px;
+      border: 1px solid #f5c6cb;
+      border-radius: 5px;
+      z-index: 1000;
+      font-size: 0.9em;
+  }
+  
+  
+  /* Responsive adjustments (optional) */
+  @media (max-width: 768px) {
+    .content-area {
+      flex-direction: column;
+      height: auto; /* Allow height to adjust on small screens */
+    }
+    .video-container, .chat-container {
+       flex: none; /* Remove flex grow */
+       height: 45vh; /* Example fixed height or use min-height */
+       min-width: unset; /* Remove min-width */
+    }
+     .chat-container {
+       height: 35vh; /* Example fixed height */
+    }
+  
+  }

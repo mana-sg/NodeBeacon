@@ -1,24 +1,28 @@
-// frontend/src/components/ChatInterface.js
+// src/components/ChatInterface.js (Updated)
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import './ChatInterface.css'; // Make sure you have styles for this
 
-function ChatInterface({ chatMessages, isConnected, onSendMessage }) {
+// Renamed chatMessages -> messages to match common usage
+function ChatInterface({ messages, isConnected, onSendMessage, chatError }) {
   const [chatInput, setChatInput] = useState('');
-  const chatEndRef = useRef(null); // Ref to scroll chat to bottom
+  const chatEndRef = useRef(null);
 
-  // Scroll chat to the bottom when new messages arrive
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    // Scroll chat to the bottom when new messages arrive
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]); // Depends only on messages changing
 
   const handleInputChange = (e) => {
     setChatInput(e.target.value);
   };
 
+  // Use the callback passed from the parent to send the message
   const handleSubmit = useCallback((e) => {
     e.preventDefault();
-    if (chatInput.trim() && isConnected) {
-      onSendMessage(chatInput); // Call the passed-in function
-      setChatInput(''); // Clear the input field
+    const trimmedInput = chatInput.trim();
+    if (trimmedInput && isConnected) {
+      onSendMessage(trimmedInput); // Call the handler from ViewPage
+      setChatInput(''); // Clear input after sending
     }
   }, [chatInput, isConnected, onSendMessage]);
 
@@ -26,24 +30,41 @@ function ChatInterface({ chatMessages, isConnected, onSendMessage }) {
     <div className="chat-container">
       <h2>Live Chat</h2>
       <div className="chat-messages">
-        {chatMessages.map((msg) => (
+        {/* Render messages passed via props */}
+        {messages.map((msg) => (
+          // Ensure msg has a unique key - assuming msg.id is provided by server
           <div key={msg.id} className="chat-message">
-            <span className="sender">{msg.sender || 'Anon'}:</span>
+            <span className="sender">{msg.sender || 'User'}:</span> {/* Provide default */}
             <span className="text">{msg.text}</span>
+            {/* Optionally display timestamp from message */}
+            {msg.timestamp && (
+                <span className="timestamp">
+                    {new Date(msg.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'})}
+                </span>
+             )}
           </div>
         ))}
-        {/* Empty div to scroll to */}
+        {/* Element to trigger scroll */}
         <div ref={chatEndRef} />
       </div>
+      {/* Display chat-specific errors passed down */}
+      {chatError && <div className="chat-error-display">{chatError}</div>}
       <form className="chat-input-form" onSubmit={handleSubmit}>
         <input
           type="text"
           value={chatInput}
           onChange={handleInputChange}
-          placeholder="Type your message..."
-          disabled={!isConnected}
+          placeholder={isConnected ? "Type your message..." : "Chat disconnected"}
+          disabled={!isConnected} // Disable based on chat connection status prop
+          aria-label="Chat message input"
         />
-        <button type="submit" disabled={!isConnected || !chatInput.trim()}>Send</button>
+        <button
+          type="submit"
+          // Disable if not connected OR if input is only whitespace
+          disabled={!isConnected || !chatInput.trim()}
+        >
+          Send
+        </button>
       </form>
     </div>
   );

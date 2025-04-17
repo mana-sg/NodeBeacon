@@ -1,223 +1,225 @@
+# consumer_server.py (MODIFIED - Video Only)
+
 import zlib
 import pickle
 import time
 import threading
 import base64
 import os
+# import json # No longer needed here
+import traceback
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
-from kafka import KafkaConsumer
-from kafka.errors import NoBrokersAvailable
+from kafka import KafkaConsumer # KafkaProducer no longer needed here
+from kafka.errors import NoBrokersAvailable, KafkaError
 from engineio.payload import Payload
 
-# Increase payload size limit for Engine.IO (underlying Socket.IO transport)
-Payload.max_decode_packets = 500 # Adjust if needed
+Payload.max_decode_packets = 500
 
 # --- Configuration ---
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
-KAFKA_TOPIC = os.getenv('KAFKA_TOPIC', 'video-stream')
-CONSUMER_HOST = os.getenv('CONSUMER_HOST', '0.0.0.0') # Listen on all interfaces
-CONSUMER_PORT = int(os.getenv('CONSUMER_PORT', 5002)) # Specific port for consumer/viewer
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000") # React dev server default
-FRONTEND_BUILD_DIR = os.getenv('FRONTEND_BUILD_DIR', '../frontend/build') # Path to React build
+KAFKA_VIDEO_TOPIC = os.getenv('KAFKA_TOPIC', 'video-stream')
+# KAFKA_CHAT_TOPIC = os.getenv('KAFKA_CHAT_TOPIC', 'chat-messages') # REMOVED
+CONSUMER_HOST = os.getenv('CONSUMER_HOST', '0.0.0.0')
+CONSUMER_PORT = int(os.getenv('CONSUMER_PORT', 5002)) # Keep original port
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000")
+FRONTEND_BUILD_DIR = os.getenv('FRONTEND_BUILD_DIR', '../frontend/build')
 
 # --- Flask App & SocketIO Setup ---
 app = Flask(__name__, static_folder=FRONTEND_BUILD_DIR, static_url_path='/')
-CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}) # Apply CORS broadly
-
+CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
 socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS,
                     async_mode='threading',
-                    max_http_buffer_size=10 * 1024 * 1024) # Increase buffer size
+                    max_http_buffer_size=10 * 1024 * 1024)
 
 # --- Shared State & Thread Control ---
-kafka_consumer_thread = None
-stop_consumer_event = threading.Event()
+kafka_video_consumer_thread = None # Renamed for clarity
+stop_consumer_event = threading.Event() # Renamed for clarity
+# kafka_chat_producer = None # REMOVED
 
-# --- Kafka Consumer Thread ---
-def kafka_consumer_thread_func():
-    """ Function running in the background thread to consume Kafka messages. """
-    print(f"🚀 Starting Kafka consumer thread for topic '{KAFKA_TOPIC}' on {KAFKA_BROKER}...")
+print(f"DEBUG [VideoServer]: Initializing script...")
+print(f"DEBUG [VideoServer]: KAFKA_BROKER={KAFKA_BROKER}")
+print(f"DEBUG [VideoServer]: KAFKA_VIDEO_TOPIC={KAFKA_VIDEO_TOPIC}")
+# print(f"DEBUG [VideoServer]: KAFKA_CHAT_TOPIC={KAFKA_CHAT_TOPIC}") # REMOVED
+print(f"DEBUG [VideoServer]: ALLOWED_ORIGINS={ALLOWED_ORIGINS}")
+
+# --- Kafka Processing Thread (VIDEO ONLY) ---
+def kafka_video_consumer_thread_func():
+    """ Consumes from Kafka (Video ONLY), Emits Video via Socket.IO """
+    print(f"DEBUG [VideoServer-Thread]: 🚀 Starting Kafka video consumer thread...")
+    print(f"DEBUG [VideoServer-Thread]:    Consuming Video Topic: '{KAFKA_VIDEO_TOPIC}'")
+    print(f"DEBUG [VideoServer-Thread]:    Broker: {KAFKA_BROKER}")
+
     consumer = None
-    try:
-        consumer = KafkaConsumer(
-            KAFKA_TOPIC,
-            bootstrap_servers=KAFKA_BROKER,
-            consumer_timeout_ms=5000,
-            auto_offset_reset='latest', # Start from the latest messages
-            # group_id='my-video-consumers' # Optional: Define a group ID
-        )
-        print("✅ Kafka Consumer connected.")
-        frame_count = 0
-        start_time = time.time()
-        active_clients = True # Assume clients initially
+    # Use a group ID specific to video consumers if desired, or keep the old one
+    consumer_group_id = 'video-stream-consumers'
+    print(f"DEBUG [VideoServer-Thread]: Consumer Group ID: {consumer_group_id}")
 
-        while not stop_consumer_event.is_set():
-            # Check if any clients are connected. If not, pause consumption.
-            # Use socketio.server.eio.sockets which is a dictionary of connected clients
-            if not socketio.server or not socketio.server.eio.sockets:
-                if active_clients:
-                    print("💤 No clients connected, pausing Kafka consumption...")
-                    active_clients = False
-                time.sleep(1) # Check again in 1 second
-                continue # Skip polling if no clients
-            elif not active_clients:
-                 print("▶️ Clients connected, resuming Kafka consumption...")
-                 active_clients = True
+    while not stop_consumer_event.is_set(): # Reconnection loop
+        try:
+            print(f"DEBUG [VideoServer-Thread]: Attempting Kafka Consumer connection...")
+            consumer = KafkaConsumer(
+                KAFKA_VIDEO_TOPIC, # Subscribe ONLY to video topic
+                bootstrap_servers=KAFKA_BROKER,
+                consumer_timeout_ms=5000,
+                group_id=consumer_group_id,
+                auto_offset_reset='latest' # Usually appropriate for video
+            )
+            print("DEBUG [VideoServer-Thread]: ✅ Kafka Consumer (Video) connected.")
 
+            frame_count = 0
+            # chat_count = 0 # REMOVED
+            start_time = time.time()
+            active_viewers = True
 
-            try:
-                # Poll with a shorter timeout to be responsive
-                msg_pack = consumer.poll(timeout_ms=100)
-
-                if not msg_pack:
-                    if stop_consumer_event.is_set(): break
+            while not stop_consumer_event.is_set():
+                if not socketio.server or not socketio.server.eio.sockets:
+                    if active_viewers:
+                        print("DEBUG [VideoServer-Thread]: 💤 No viewers connected, pausing Kafka consumption...")
+                        active_viewers = False
+                    time.sleep(1)
                     continue
+                elif not active_viewers:
+                    print("DEBUG [VideoServer-Thread]: ▶️ Viewers connected, resuming Kafka consumption...")
+                    active_viewers = True
 
-                for tp, messages in msg_pack.items():
-                    for message in messages:
+                try:
+                    msg_pack = consumer.poll(timeout_ms=1000)
+                    if not msg_pack:
                         if stop_consumer_event.is_set(): break
+                        continue
 
-                        now = time.time()
-                        try:
-                            # 1. Decompress
-                            decompressed = zlib.decompress(message.value)
-                            # 2. Unpickle - Expecting a list containing one dictionary
-                            frame_group = pickle.loads(decompressed)
-
-                            if not isinstance(frame_group, list) or not frame_group:
-                                print(f"⚠️ Consumer: Received non-list or empty list: {type(frame_group)}")
-                                continue
-                            frame_data = frame_group[0]
-                            if not isinstance(frame_data, dict) or 'frame' not in frame_data:
-                                print(f"⚠️ Consumer: List item is not a valid frame dictionary: {type(frame_data)}")
-                                continue
-
-                            jpeg_bytes = frame_data['frame']
-                            kafka_timestamp = frame_data.get('timestamp', now)
-
-                            # 3. Base64 Encode for browser display
-                            base64_frame = base64.b64encode(jpeg_bytes).decode('utf-8')
-                            data_url = f"data:image/jpeg;base64,{base64_frame}"
-
-                            # 4. Emit frame via Socket.IO to all connected viewers
-                            socketio.emit('video_frame', {'image': data_url, 'timestamp': now})
-
+                    # No need to iterate topics, we only subscribed to one
+                    for tp, messages in msg_pack.items():
+                        if stop_consumer_event.is_set(): break
+                        # Assert topic is video topic if needed: assert tp.topic == KAFKA_VIDEO_TOPIC
+                        for message in messages:
+                            if stop_consumer_event.is_set(): break
+                            process_video_message(message) # Process video frame
                             frame_count += 1
-                            if now - start_time >= 5.0:
-                                latency_ms = (now - kafka_timestamp) * 1000
-                                print(f" [Kafka Consumer]: Processed {frame_count} frames in ~5s. Last Kafka ts diff: {latency_ms:.1f} ms")
-                                frame_count = 0
-                                start_time = now
 
-                        except pickle.UnpicklingError:
-                            print("⚠️ Consumer: Could not unpickle message data.")
-                        except zlib.error:
-                            print("⚠️ Consumer: Could not decompress message data.")
-                        except IndexError:
-                             print("⚠️ Consumer: Received empty list after unpickling.")
-                        except Exception as e:
-                            print(f"❌ Consumer: Error processing Kafka message: {e}")
+                    now = time.time()
+                    if now - start_time >= 10.0:
+                        print(f"DEBUG [VideoServer-Thread - Stats]: Processed {frame_count} video frames in ~10s.")
+                        frame_count = 0
+                        # chat_count = 0 # REMOVED
+                        start_time = now
 
-                    if stop_consumer_event.is_set(): break
-                if stop_consumer_event.is_set(): break
+                except Exception as e:
+                    print(f"❌ ERROR [VideoServer-Thread]: Kafka polling/processing error: {e}")
+                    traceback.print_exc()
+                    socketio.sleep(1)
 
-            except Exception as e:
-                 print(f"❌ Consumer: Kafka polling error: {e}")
-                 socketio.sleep(1)
+            break # Exit outer loop
 
-        print("🏁 Consumer loop finished.")
+        except NoBrokersAvailable:
+            print(f"❌ ERROR [VideoServer-Thread]: Kafka Consumer Error: No brokers available at {KAFKA_BROKER}. Retrying in 10s...")
+        except KafkaError as e:
+             print(f"❌ ERROR [VideoServer-Thread]: Kafka Consumer Setup Error (KafkaError): {e}. Retrying in 10s...")
+        except Exception as e:
+            print(f"❌ ERROR [VideoServer-Thread]: Kafka Consumer Setup Error (General Exception): {e}. Retrying in 10s...")
+            traceback.print_exc()
+        finally:
+            if consumer:
+                print("DEBUG [VideoServer-Thread]: Closing Kafka Consumer (Video)...")
+                consumer.close()
+                print("DEBUG [VideoServer-Thread]: ✅ Kafka Consumer (Video) closed.")
+                consumer = None
 
-    except NoBrokersAvailable:
-         print(f"❌ Kafka Consumer Error: No brokers available at {KAFKA_BROKER}")
+        if not stop_consumer_event.is_set():
+            socketio.sleep(10) # Wait before retrying connection
+
+    print("DEBUG [VideoServer-Thread]: 🛑 Kafka Video Consumer thread stopped.")
+
+
+def process_video_message(message):
+    """ Decodes video frame and emits it via Socket.IO (Unchanged) """
+    now = time.time()
+    try:
+        decompressed = zlib.decompress(message.value)
+        frame_group = pickle.loads(decompressed)
+        if not isinstance(frame_group, list) or not frame_group: return
+        frame_data = frame_group[0]
+        if not isinstance(frame_data, dict) or 'frame' not in frame_data: return
+
+        jpeg_bytes = frame_data['frame']
+        kafka_timestamp = frame_data.get('timestamp', now)
+        latency_ms = (now - kafka_timestamp) * 1000
+        base64_frame = base64.b64encode(jpeg_bytes).decode('utf-8')
+        data_url = f"data:image/jpeg;base64,{base64_frame}"
+        # Use the socketio instance from the main scope
+        socketio.emit('video_frame', {'image': data_url, 'latency': latency_ms})
     except Exception as e:
-        print(f"❌ Kafka Consumer Thread Initialization Error: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        if consumer:
-            consumer.close()
-            print("✅ Kafka Consumer closed.")
-        print("🛑 Kafka Consumer thread stopped.")
+        print(f"❌ ERROR [VideoServer - process_video_message]: Error processing offset {message.offset}: {e}")
 
-# --- Flask Routes ---
+# def process_chat_message_for_broadcast(message): # REMOVED
+# def initialize_kafka_producer(): # REMOVED
+
+# --- Flask Routes (Unchanged) ---
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    """Serve the React frontend for all non-API routes."""
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        # Serve specific static files (like CSS, JS)
         return app.send_static_file(path)
     else:
-        # Serve index.html for React Router routes
-        print(f"Serving index.html for path: {path}")
         return app.send_static_file('index.html')
 
-# --- Socket.IO Event Handlers (Viewer/Consumer Side) ---
+# --- Socket.IO Event Handlers (Only Connect/Disconnect needed for Video Server) ---
 @socketio.on('connect')
 def handle_connect():
-    """ Handle new WebSocket connections (viewers) """
-    global kafka_consumer_thread
-    print(f"✅ Viewer client connected: {request.sid}")
+    """ Handle new WebSocket connections (video viewers) """
+    global kafka_video_consumer_thread
+    print(f"DEBUG [VideoServer]: ✅ Viewer client connected: {request.sid}")
 
-    # Start Kafka consumer thread if it's not already running
-    if kafka_consumer_thread is None or not kafka_consumer_thread.is_alive():
-        print("Attempting to start Kafka consumer thread...")
+    # Start Kafka video consumer thread if not running
+    if kafka_video_consumer_thread is None or not kafka_video_consumer_thread.is_alive():
+        print("DEBUG [VideoServer]: Client connected, starting Kafka video consumer thread...")
         stop_consumer_event.clear()
-        kafka_consumer_thread = socketio.start_background_task(target=kafka_consumer_thread_func)
-        if kafka_consumer_thread:
-             print("Consumer thread started via background task.")
-        else:
-             print("Failed to start consumer thread.")
-    else:
-        # If thread exists, ensure it knows a client connected (wakes from potential pause)
-        print("Consumer thread already running.")
-
+        kafka_video_consumer_thread = threading.Thread(target=kafka_video_consumer_thread_func, daemon=True)
+        kafka_video_consumer_thread.start()
+        if not kafka_video_consumer_thread.is_alive():
+             print("❌ ERROR [VideoServer]: Failed to start video consumer thread.")
+    # else:
+    #      print("DEBUG [VideoServer]: Video consumer thread already running.") # Less verbose
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """ Handle WebSocket disconnections """
-    print(f"❌ Viewer client disconnected: {request.sid}")
-    # The consumer thread now checks for active clients internally,
-    # so no need to explicitly stop it here unless that's desired behavior.
-    # Consider stopping if idle for a long time? More complex logic.
+    print(f"DEBUG [VideoServer]: ❌ Viewer client disconnected: {request.sid}")
+    # Consumer thread now handles pausing/resuming itself based on active viewers
 
-@socketio.on('send_chat_message')
-def handle_chat_message(data):
-    """ Handle incoming chat messages from clients """
-    message_text = data.get('message', '').strip()
-    if not message_text:
-        return
+# @socketio.on('send_chat_message') # REMOVED
+# def handle_chat_message(data): # REMOVED
 
-    print(f"💬 Received chat message: {message_text}")
-    chat_data = {
-        'id': request.sid + str(time.time()),
-        'sender': request.sid[:6], # Simple anonymous sender ID
-        'text': message_text,
-        'timestamp': time.time()
-    }
-    # Broadcast chat message to all connected viewers
-    emit('new_chat_message', chat_data, broadcast=True)
 
 # --- Main Execution & Cleanup ---
 def main():
-    print(f"🖥️ Starting Consumer/Viewer Server on {CONSUMER_HOST}:{CONSUMER_PORT}")
-    print(f"🔧 Kafka Broker: {KAFKA_BROKER}, Topic: {KAFKA_TOPIC}")
-    print(f"🎨 Serving frontend from: {app.static_folder}")
-    print(f"🔌 Allowing viewer connections from: {ALLOWED_ORIGINS}")
+    print(f"DEBUG [VideoServer]: 🖥️ Starting Video Server on {CONSUMER_HOST}:{CONSUMER_PORT}")
+    print(f"DEBUG [VideoServer]: 🔧 Kafka Broker: {KAFKA_BROKER}")
+    print(f"DEBUG [VideoServer]:    - Consuming Video Topic: {KAFKA_VIDEO_TOPIC}")
+    print(f"DEBUG [VideoServer]: 🎨 Serving frontend from: {app.static_folder}")
+    print(f"DEBUG [VideoServer]: 🔌 Allowing viewer connections from: {ALLOWED_ORIGINS}")
+
+    # Note: Consumer thread starts on first client connection
 
     try:
+        print("DEBUG [VideoServer]: Starting SocketIO server...")
         socketio.run(app, host=CONSUMER_HOST, port=CONSUMER_PORT, debug=False, use_reloader=False)
     except KeyboardInterrupt:
-        print("\nCtrl+C received, shutting down consumer server...")
+        print("\nDEBUG [VideoServer]: Ctrl+C received, shutting down...")
     finally:
-        # Graceful shutdown
-        print("Requesting consumer thread stop...")
+        print("DEBUG [VideoServer]: Requesting video consumer thread stop...")
         stop_consumer_event.set()
-        if kafka_consumer_thread and kafka_consumer_thread.is_alive():
-            print("Waiting for consumer thread to finish...")
-            kafka_consumer_thread.join(timeout=5.0)
-        print("Consumer server shutdown complete.")
+        if kafka_video_consumer_thread and kafka_video_consumer_thread.is_alive():
+            print("DEBUG [VideoServer]: Waiting for video consumer thread to finish...")
+            kafka_video_consumer_thread.join(timeout=5.0)
+            if kafka_video_consumer_thread.is_alive():
+                print("DEBUG [VideoServer]: Video consumer thread did not finish in time.")
+
+        # No producer to close here
+
+        print("DEBUG [VideoServer]: Video server shutdown complete.")
 
 if __name__ == '__main__':
     main()
