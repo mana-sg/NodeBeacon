@@ -1,11 +1,10 @@
-Flask
-Flask-SocketIO
-Flask-Cors
 kafka-python
+flask
+flask-socketio
+flask-cors
+eventlet # or gevent, for flask-socketio async mode
+opencv-python-headless # Use headless for server environment
 numpy
-opencv-python-headless  # Use headless if not displaying frames on backend
-python-dotenv           # For loading .env file (optional)
-# eventlet or gevent might be needed for production deployment instead of Flask dev server
-# e.g., uncomment one:
-# eventlet
-# gevent
+zlib # Usually built-in
+mysql-connector-python
+pyspark==3.3.1 # Match Spark version used in compose!

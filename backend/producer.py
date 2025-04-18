@@ -1,3 +1,4 @@
+# producer.py
 import cv2
 import zlib
 import pickle
@@ -12,6 +13,7 @@ from kafka import KafkaProducer
 from kafka.errors import NoBrokersAvailable
 from engineio.payload import Payload
 from flask import request
+import uuid # For default stream ID
 
 # Increase payload size limit if needed (less relevant here, more for consumer)
 Payload.max_decode_packets = 500
@@ -22,33 +24,47 @@ KAFKA_TOPIC = os.getenv('KAFKA_TOPIC', 'video-stream')
 PRODUCER_HOST = os.getenv('PRODUCER_HOST', '0.0.0.0') # Listen on all interfaces
 PRODUCER_PORT = int(os.getenv('PRODUCER_PORT', 5001)) # Specific port for producer control
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000") # React dev server default
-VIDEO_SOURCE = int(os.getenv('VIDEO_SOURCE', 0)) # 0 for default webcam, adjust as needed
+VIDEO_SOURCE = os.getenv('VIDEO_SOURCE', '0') # Keep as string for potential file paths
+try:
+    VIDEO_SOURCE_INT = int(VIDEO_SOURCE)
+except ValueError:
+    VIDEO_SOURCE_INT = VIDEO_SOURCE # Use as string if not an integer
 PRODUCER_FPS_LIMIT = int(os.getenv('PRODUCER_FPS_LIMIT', 30))
+# --- ADD STREAM ID ---
+# Generate a default unique ID if not provided, or use the env var
+DEFAULT_STREAM_ID = f"stream_{uuid.uuid4().hex[:8]}"
+STREAM_ID = os.getenv('STREAM_ID', DEFAULT_STREAM_ID)
+# --- END ADD STREAM ID ---
 
 # --- Flask App & SocketIO Setup (for control only) ---
 app = Flask(__name__)
-# Apply CORS *only* to the Socket.IO path if no other routes are needed
-# Or apply broadly if you might add simple status endpoints later
 CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
 socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS,
-                    async_mode='threading') # No large buffer needed here
+                    async_mode='threading')
 
 # --- Shared State & Thread Control ---
 kafka_producer_thread = None
 stop_producer_event = threading.Event()
 is_producer_active = False # Track producer status
+current_stream_id = STREAM_ID # Store the active stream ID
+
+# --- Logging ---
+LOG_PREFIX = "DEBUG [Producer]:"
 
 # --- Kafka Producer Thread ---
-def kafka_producer_thread_func():
+def kafka_producer_thread_func(stream_id_to_use):
     """ Function running in the background to capture video and send to Kafka. """
-    global is_producer_active
-    print(f"🚀 Starting Kafka producer thread for topic '{KAFKA_TOPIC}' on {KAFKA_BROKER}...")
-    print(f"📷 Trying to open video source: {VIDEO_SOURCE}")
+    global is_producer_active, current_stream_id
+    print(f"{LOG_PREFIX} 🚀 Starting Kafka producer thread for STREAM_ID '{stream_id_to_use}'...")
+    print(f"{LOG_PREFIX}    Topic '{KAFKA_TOPIC}' on {KAFKA_BROKER}...")
+    print(f"{LOG_PREFIX} 📷 Trying to open video source: {VIDEO_SOURCE}")
+
     producer = None
     cap = None
     is_producer_active = True
+    current_stream_id = stream_id_to_use # Update global state
     # Emit status via the producer's socketio instance
-    socketio.emit('stream_status', {'active': True, 'error': None})
+    socketio.emit('stream_status', {'active': True, 'error': None, 'stream_id': current_stream_id})
 
     frame_interval = 1.0 / PRODUCER_FPS_LIMIT if PRODUCER_FPS_LIMIT > 0 else 0
     last_emit_time = time.time()
@@ -58,21 +74,27 @@ def kafka_producer_thread_func():
         try:
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_BROKER,
-                # compression_type='gzip', # Optional
-                # acks='1' # default
+                # linger_ms=5, # Batch messages slightly
+                # batch_size=16384 * 2, # Default 16KB, maybe increase
+                # max_request_size=1048576 * 2, # Default 1MB, increase if needed
+                # compression_type='gzip', # Optional - adds CPU overhead
+                 key_serializer=lambda k: k.encode('utf-8') # Ensure key is bytes
             )
-            print("✅ Kafka Producer connected.")
+            print(f"{LOG_PREFIX} ✅ Kafka Producer connected.")
         except NoBrokersAvailable:
-            print(f"❌ Kafka Producer Error: No brokers available at {KAFKA_BROKER}")
+            print(f"{LOG_PREFIX} ❌ Kafka Producer Error: No brokers available at {KAFKA_BROKER}")
+            raise
+        except Exception as e:
+            print(f"{LOG_PREFIX} ❌ Kafka Producer Error (Init): {e}")
             raise
 
         # Initialize Video Capture
-        cap = cv2.VideoCapture(VIDEO_SOURCE)
+        cap = cv2.VideoCapture(VIDEO_SOURCE_INT)
         if not cap.isOpened():
-            error_msg = f"Could not open video source {VIDEO_SOURCE}"
-            print(f"❌ Error: {error_msg}")
+            error_msg = f"Could not open video source {VIDEO_SOURCE_INT}"
+            print(f"{LOG_PREFIX} ❌ Error: {error_msg}")
             raise IOError(error_msg)
-        print(f"✅ Video source {VIDEO_SOURCE} opened successfully.")
+        print(f"{LOG_PREFIX} ✅ Video source {VIDEO_SOURCE_INT} opened successfully.")
 
         frame_count = 0
         start_time = time.time()
@@ -81,19 +103,26 @@ def kafka_producer_thread_func():
             loop_start_time = time.time()
             ret, frame = cap.read()
             if not ret:
-                print("⚠️ Producer: End of video source or cannot read frame.")
+                print(f"⚠️ {LOG_PREFIX} Producer: End of video source or cannot read frame.")
                 break
 
-            # 1. Encode Frame (e.g., JPEG)
-            ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            # --- Adjust Quality vs Size/CPU ---
+            quality = 80 # Lower quality -> smaller size, less CPU encoding
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+            ret, buffer = cv2.imencode('.jpg', frame, encode_param)
             if not ret:
-                print("⚠️ Producer: Failed to encode frame to JPEG.")
+                print(f"⚠️ {LOG_PREFIX} Producer: Failed to encode frame to JPEG.")
                 continue
             jpeg_bytes = buffer.tobytes()
 
-            # 2. Prepare Data Package
+            # 2. Prepare Data Package - INCLUDE STREAM_ID
             now = time.time()
-            frame_data = {'frame': jpeg_bytes, 'timestamp': now}
+            frame_data = {
+                'frame': jpeg_bytes,
+                'timestamp': now,
+                'stream_id': stream_id_to_use, # Include the ID
+                'frame_bytes': len(jpeg_bytes) # Add frame size metric
+            }
             frame_group = [frame_data] # Keep the list structure
 
             # 3. Pickle and Compress
@@ -102,9 +131,11 @@ def kafka_producer_thread_func():
 
             # 4. Send to Kafka
             try:
-                producer.send(KAFKA_TOPIC, value=compressed_data)
+                # Send with stream_id as key for potential partitioning
+                producer.send(KAFKA_TOPIC, value=compressed_data, key=stream_id_to_use)
             except Exception as e:
-                print(f"❌ Producer: Error sending message to Kafka: {e}")
+                print(f"{LOG_PREFIX} ❌ Producer: Error sending message to Kafka: {e}")
+                # Maybe add retry logic or check producer.metrics()
                 time.sleep(1) # Avoid tight loop on persistent Kafka errors
 
             frame_count += 1
@@ -119,109 +150,139 @@ def kafka_producer_thread_func():
             current_time = time.time()
             if current_time - start_time >= 5.0:
                 actual_fps = frame_count / (current_time - start_time)
-                print(f" [Kafka Producer]: Sent {frame_count} frames in ~5s. Rate: ~{actual_fps:.1f} fps")
+                print(f" [{LOG_PREFIX} {stream_id_to_use}]: Sent {frame_count} frames (~{actual_fps:.1f} fps).")
                 frame_count = 0
                 start_time = current_time
 
-
-        print("🏁 Producer loop finished.")
+        print(f"{LOG_PREFIX} 🏁 Producer loop finished for stream {stream_id_to_use}.")
 
     except Exception as e:
-        error_message = f"❌ Kafka Producer Thread Error: {e}"
+        error_message = f"{LOG_PREFIX} ❌ Kafka Producer Thread Error ({stream_id_to_use}): {e}"
         print(error_message)
-        # Emit status update with error
-        socketio.emit('stream_status', {'active': False, 'error': str(e)})
+        import traceback
+        traceback.print_exc()
+        socketio.emit('stream_status', {'active': False, 'error': str(e), 'stream_id': stream_id_to_use})
     finally:
         if cap:
             cap.release()
-            print("✅ Video capture released.")
+            print(f"{LOG_PREFIX} ✅ Video capture released.")
         if producer:
-            producer.close()
-            print("✅ Kafka Producer closed.")
+            try:
+                producer.flush(timeout=5.0) # Ensure all messages are sent
+                print(f"{LOG_PREFIX} ✅ Kafka Producer flushed.")
+            except Exception as fe:
+                 print(f"{LOG_PREFIX} ⚠️ Error flushing producer: {fe}")
+            finally:
+                 producer.close()
+                 print(f"{LOG_PREFIX} ✅ Kafka Producer closed.")
         is_producer_active = False
-        # Ensure final status update is sent if thread exits cleanly or with error
-        socketio.emit('stream_status', {'active': False, 'error': None if stop_producer_event.is_set() else 'Stream ended unexpectedly'})
-        print("🛑 Kafka Producer thread stopped.")
+        # Ensure final status update reflects reality
+        final_error = None if stop_producer_event.is_set() else 'Stream ended unexpectedly'
+        socketio.emit('stream_status', {
+            'active': False,
+            'error': final_error,
+            'stream_id': stream_id_to_use if final_error else None # Send ID if stopped unexpectedly
+        })
+        print(f"{LOG_PREFIX} 🛑 Kafka Producer thread stopped for stream {stream_id_to_use}.")
 
 # --- Socket.IO Event Handlers (Producer Control) ---
 @socketio.on('connect')
 def handle_connect():
     """ Handle new WebSocket connections (likely from control page) """
-    print(f"✅ Control client connected: {request.sid}")
+    print(f"{LOG_PREFIX} ✅ Control client connected: {request.sid}")
     # Inform the new client about the current producer status
-    socketio.emit('stream_status', {'active': is_producer_active, 'error': None}, room=request.sid)
+    socketio.emit('stream_status', {
+        'active': is_producer_active,
+        'error': None, # Assuming no error if just connecting
+        'stream_id': current_stream_id if is_producer_active else None
+    }, room=request.sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """ Handle WebSocket disconnections """
-    print(f"❌ Control client disconnected: {request.sid}")
-    # Optional: Stop producer if *no* control clients are connected? Decide policy.
-    # active_connections = len(socketio.server.eio.sockets)
-    # print(f"Active connections: {active_connections}")
-    # if active_connections == 0 and is_producer_active:
-    #     print("No control clients left, stopping producer.")
-    #     stop_producer()
-
+    print(f"{LOG_PREFIX} ❌ Control client disconnected: {request.sid}")
+    # Optional: Policy to stop if no controllers are connected (implement if needed)
 
 @socketio.on('start_stream')
-def handle_start_stream():
+def handle_start_stream(data=None): # Make data optional
     """ Client requested to start the Kafka producer stream. """
-    global kafka_producer_thread, is_producer_active
-    print(f"Received start_stream request from {request.sid}")
+    global kafka_producer_thread, is_producer_active, current_stream_id
+    # Handle the case where data is None or stream_id is missing safely
+    requested_stream_id = STREAM_ID # Default stream ID
+    if data and isinstance(data, dict) and 'stream_id' in data and data['stream_id']:
+        requested_stream_id = data['stream_id']
+
+    print(f"{LOG_PREFIX} Received start_stream request from {request.sid} for stream_id: {requested_stream_id}")
+
     if kafka_producer_thread is None or not kafka_producer_thread.is_alive():
-        print("Attempting to start Kafka producer thread...")
+        print(f"{LOG_PREFIX} Attempting to start Kafka producer thread for {requested_stream_id}...")
         stop_producer_event.clear()
-        kafka_producer_thread = socketio.start_background_task(target=kafka_producer_thread_func)
+        # Pass the stream_id to the thread function
+        kafka_producer_thread = socketio.start_background_task(
+            target=kafka_producer_thread_func,
+            stream_id_to_use=requested_stream_id
+        )
         if kafka_producer_thread:
-            print("Producer thread started via background task.")
+            print(f"{LOG_PREFIX} Producer thread for {requested_stream_id} started via background task.")
             # Status is updated within the thread function
         else:
-            print("Failed to start producer thread.")
-            socketio.emit('stream_status', {'active': False, 'error': 'Failed to start thread'}, room=request.sid)
+            print(f"{LOG_PREFIX} Failed to start producer thread.")
+            socketio.emit('stream_status', {
+                'active': False,
+                'error': 'Failed to start thread',
+                'stream_id': None
+            }, room=request.sid)
     else:
-        print("Producer thread already running.")
-        # Re-emit current status just in case
-        socketio.emit('stream_status', {'active': True, 'error': None}, room=request.sid)
+        print(f"{LOG_PREFIX} Producer thread already running (Stream ID: {current_stream_id}). Cannot start another.")
+        # Re-emit current status
+        socketio.emit('stream_status', {
+            'active': True,
+            'error': 'Producer already active',
+            'stream_id': current_stream_id
+        }, room=request.sid)
 
 @socketio.on('stop_stream')
 def handle_stop_stream():
     """ Client requested to stop the Kafka producer stream. """
-    print(f"Received stop_stream request from {request.sid}")
+    print(f"{LOG_PREFIX} Received stop_stream request from {request.sid}")
     stop_producer() # Use helper function
 
 def stop_producer():
     """ Helper function to stop the producer thread """
     global kafka_producer_thread # No need for is_producer_active here
     if kafka_producer_thread and kafka_producer_thread.is_alive():
-        print("Requesting Kafka producer thread stop...")
+        print(f"{LOG_PREFIX} Requesting Kafka producer thread stop (Stream ID: {current_stream_id})...")
         stop_producer_event.set()
         # Let the thread emit its final status
     else:
-        print("Producer thread not running or already stopped.")
+        print(f"{LOG_PREFIX} Producer thread not running or already stopped.")
         # Ensure status is correct if called when already stopped
         if is_producer_active: # Check the flag just in case
-             socketio.emit('stream_status', {'active': False, 'error': None})
+             socketio.emit('stream_status', {'active': False, 'error': None, 'stream_id': None})
 
 
 # --- Main Execution & Cleanup ---
 def main():
-    print(f"🎬 Starting Producer Control Server on {PRODUCER_HOST}:{PRODUCER_PORT}")
-    print(f"🔧 Kafka Broker: {KAFKA_BROKER}, Topic: {KAFKA_TOPIC}")
-    print(f"📹 Video Source: {VIDEO_SOURCE}, Producer FPS Limit: {PRODUCER_FPS_LIMIT}")
-    print(f"🔌 Allowing control connections from: {ALLOWED_ORIGINS}")
+    print(f"{LOG_PREFIX} 🎬 Starting Producer Control Server on {PRODUCER_HOST}:{PRODUCER_PORT}")
+    print(f"{LOG_PREFIX} 🔧 Kafka Broker: {KAFKA_BROKER}, Topic: {KAFKA_TOPIC}")
+    print(f"{LOG_PREFIX} 📹 Video Source: {VIDEO_SOURCE}, Producer FPS Limit: {PRODUCER_FPS_LIMIT}")
+    print(f"{LOG_PREFIX} 🆔 Default Stream ID: {STREAM_ID} (Set with STREAM_ID env var)")
+    print(f"{LOG_PREFIX} 🔌 Allowing control connections from: {ALLOWED_ORIGINS}")
 
     try:
-        socketio.run(app, host=PRODUCER_HOST, port=PRODUCER_PORT, debug=False, use_reloader=False) # Turn off debug/reloader for stability
+        # use_reloader=False is important for background threads
+        socketio.run(app, host=PRODUCER_HOST, port=PRODUCER_PORT, debug=False, use_reloader=False)
     except KeyboardInterrupt:
-        print("\nCtrl+C received, shutting down producer server...")
+        print(f"\n{LOG_PREFIX} Ctrl+C received, shutting down producer server...")
     finally:
-        # Graceful shutdown
-        print("Requesting producer thread stop...")
+        print(f"{LOG_PREFIX} Requesting producer thread stop...")
         stop_producer_event.set()
         if kafka_producer_thread and kafka_producer_thread.is_alive():
-            print("Waiting for producer thread to finish...")
+            print(f"{LOG_PREFIX} Waiting for producer thread to finish...")
             kafka_producer_thread.join(timeout=5.0)
-        print("Producer server shutdown complete.")
+            if kafka_producer_thread.is_alive():
+                print(f"⚠️ {LOG_PREFIX} Producer thread did not exit cleanly.")
+        print(f"{LOG_PREFIX} Producer server shutdown complete.")
 
 if __name__ == '__main__':
     main()
