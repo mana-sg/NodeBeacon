@@ -99,6 +99,7 @@ func (n *Node) Store(ctx context.Context, filepath string) (cid.Cid, <-chan Stre
 
 // StoreChunk stores a single chunk to IPFS
 func (n *Node) StoreChunk(ctx context.Context, chunk *Chunk) (string, error) {
+	// Create a reader from chunk data
 	reader := bytes.NewReader(chunk.Data)
 	
 	// Add to IPFS
@@ -107,22 +108,14 @@ func (n *Node) StoreChunk(ctx context.Context, chunk *Chunk) (string, error) {
 		return "", fmt.Errorf("failed to store chunk %d: %v", chunk.Index, err)
 	}
 	
-	// Create a directory for chunks in MFS if it doesn't exist
-	err = n.Shell.FilesMkdir(ctx, "/my-files/chunks", shell.FilesMkdir.Parents(true))
+	// Pin the content to prevent garbage collection
+	err = n.Shell.Pin(cidStr)
 	if err != nil {
-		return cidStr, fmt.Errorf("failed to create chunks directory: %v", err)
+		return cidStr, fmt.Errorf("failed to pin chunk %d: %v", chunk.Index, err)
 	}
 	
-	// Write the chunk to MFS
-	chunkReader := bytes.NewReader(chunk.Data)
-	chunkPath := fmt.Sprintf("/my-files/chunks/chunk_%d_%s", chunk.Index, cidStr)
-	err = n.Shell.FilesWrite(ctx, chunkPath, chunkReader, 
-		shell.FilesWrite.Create(true), 
-		shell.FilesWrite.Parents(true))
-	
-	if err != nil {
-		return cidStr, fmt.Errorf("failed to add chunk to MFS: %v", err)
-	}
+	// We're not storing in general chunks directory anymore,
+	// only in file-specific directories
 	
 	return cidStr, nil
 }
