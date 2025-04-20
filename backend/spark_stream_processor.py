@@ -1,22 +1,25 @@
 import os
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, window, avg, max, min, count, expr, to_timestamp
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, LongType, TimestampType
+from pyspark.sql.functions import from_json, col, window, to_timestamp, current_timestamp
+import pyspark.sql.functions as F
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType, IntegerType,
+    LongType
+)
 
-# --- Configuration ---
+# === Configurations ===
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
 KAFKA_METRICS_TOPIC = os.getenv('KAFKA_METRICS_TOPIC', 'stream-metrics')
 APP_NAME = "LiveStreamMetricsProcessor"
-PROCESSING_INTERVAL = "30 seconds" # How often to trigger processing
-WINDOW_DURATION = "1 minute"       # Tumbling or Sliding Window duration
-SLIDE_DURATION = "30 seconds"      # Sliding interval (if using sliding window)
-WATERMARK_DELAY = "10 seconds"     # How long to wait for late data
+PROCESSING_INTERVAL = "5 seconds"  # Faster micro-batches for low-latency
+WINDOW_DURATION = "30 seconds"
+SLIDE_DURATION = "10 seconds"
+WATERMARK_DELAY = "10 seconds"
 
-# --- Define Schema for Kafka JSON Data ---
-# Must match the JSON structure sent by consumer.py's metrics publisher
+# === Define Schema ===
 metrics_schema = StructType([
     StructField("stream_id", StringType(), True),
-    StructField("timestamp", DoubleType(), True), # UNIX timestamp from consumer
+    StructField("timestamp", DoubleType(), True),
     StructField("interval_sec", DoubleType(), True),
     StructField("frame_count", IntegerType(), True),
     StructField("processing_fps", DoubleType(), True),
@@ -24,28 +27,23 @@ metrics_schema = StructType([
     StructField("average_processing_time_ms", DoubleType(), True),
     StructField("average_frame_kbytes", DoubleType(), True),
     StructField("viewer_count", IntegerType(), True),
-    StructField("latency_stddev_ms", DoubleType(), True), # Nullable
+    StructField("latency_stddev_ms", DoubleType(), True),
     StructField("kafka_last_offset", LongType(), True),
     StructField("kafka_partition", IntegerType(), True)
 ])
 
-print(f"Starting {APP_NAME}...")
-print(f"Kafka Broker: {KAFKA_BROKER}")
-print(f"Metrics Topic: {KAFKA_METRICS_TOPIC}")
-print(f"Window: {WINDOW_DURATION}, Slide: {SLIDE_DURATION}, Watermark: {WATERMARK_DELAY}")
-
-# --- Initialize Spark Session ---
+# === Initialize Spark Session ===
 spark = SparkSession \
     .builder \
     .appName(APP_NAME) \
     .config("spark.sql.session.timeZone", "UTC") \
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
     .getOrCreate()
 
-# Set log level to WARN to reduce verbosity (optional)
 spark.sparkContext.setLogLevel("WARN")
-print("SparkSession Initialized.")
+print("✅ SparkSession Initialized.")
 
-# --- Read from Kafka ---
+# === Read Kafka Stream ===
 raw_stream_df = spark \
     .readStream \
     .format("kafka") \
@@ -55,56 +53,45 @@ raw_stream_df = spark \
     .option("failOnDataLoss", "false") \
     .load()
 
-print("Kafka stream reader initialized.")
+print("🔄 Kafka stream reader initialized.")
 
-# --- Parse JSON and Select Data ---
-# Kafka message value is binary, cast to string, then parse JSON
-parsed_stream_df = raw_stream_df \
-    .selectExpr("CAST(value AS STRING)") \
-    .select(from_json(col("value"), metrics_schema).alias("data")) \
-    .select("data.*") # Flatten the struct
+# === Parse JSON Payload ===
+parsed_df = raw_stream_df \
+    .selectExpr("CAST(value AS STRING) AS json_str") \
+    .select(from_json(col("json_str"), metrics_schema).alias("data")) \
+    .select("data.*")
 
-# --- Add Timestamp and Watermark ---
-# Convert UNIX timestamp (double) from JSON payload to Spark Timestamp
-# Assuming the 'timestamp' field is the event time
-processed_stream_df = parsed_stream_df \
+# === Convert Timestamps ===
+processed_df = parsed_df \
     .withColumn("event_timestamp", to_timestamp(col("timestamp"))) \
-    .withWatermark("event_timestamp", WATERMARK_DELAY) # Handle late data
+    .withColumn("ingestion_time", current_timestamp()) \
+    .withWatermark("event_timestamp", WATERMARK_DELAY)
 
-print("JSON parsed, timestamp added, watermark set.")
+print("📦 Event timestamp + watermark applied.")
 
-# --- Define Aggregations (Example Workload) ---
-# Calculate avg FPS, max viewers, avg latency per stream_id in windows
-windowed_aggregates_df = processed_stream_df \
+# === Windowed Aggregations ===
+windowed_metrics_df = processed_df \
     .groupBy(
-        window(col("event_timestamp"), WINDOW_DURATION, SLIDE_DURATION), # Sliding Window
-        # window(col("event_timestamp"), WINDOW_DURATION), # Tumbling Window
+        window(col("event_timestamp"), WINDOW_DURATION, SLIDE_DURATION),
         col("stream_id")
     ) \
     .agg(
-        avg("processing_fps").alias("avg_fps"),
-        max("viewer_count").alias("max_viewers"),
-        avg("average_latency_ms").alias("avg_latency"),
-        sum("frame_count").alias("total_frames_in_window")
-        # Add more aggregations as needed (min, stddev, count, etc.)
+        F.avg("processing_fps").alias("avg_fps"),
+        F.max("viewer_count").alias("max_viewers"),
+        F.avg("average_latency_ms").alias("avg_latency"),
+        F.sum("frame_count").alias("frames_in_window"),
+        F.max("ingestion_time").alias("last_ingested_at")  # Track latest arrival
     ) \
     .select(
-         "window.start",
-         "window.end",
-         "stream_id",
-         "avg_fps",
-         "max_viewers",
-         "avg_latency",
-         "total_frames_in_window"
-     ) # Select desired columns
+        "window.start", "window.end", "stream_id",
+        "avg_fps", "max_viewers", "avg_latency", "frames_in_window",
+        "last_ingested_at"
+    )
 
-print("Windowed aggregations defined.")
+print("📊 Aggregations defined.")
 
-# --- Output Results (Console Sink for Testing) ---
-# Use 'update' mode for aggregations with watermark
-# Use 'complete' mode if not using watermark (can grow state indefinitely)
-# Use 'append' mode for simple transformations (no aggregation)
-query = windowed_aggregates_df \
+# === Output Stream to Console (Live Debug) ===
+query = windowed_metrics_df \
     .writeStream \
     .outputMode("update") \
     .format("console") \
@@ -113,19 +100,5 @@ query = windowed_aggregates_df \
     .trigger(processingTime=PROCESSING_INTERVAL) \
     .start()
 
-# You could also write to another Kafka topic, files, or a database sink
-# Example: Kafka Sink
-# query = windowed_aggregates_df \
-#     .selectExpr("to_json(struct(*)) AS value") \ # Convert row to JSON string
-#     .writeStream \
-#     .format("kafka") \
-#     .option("kafka.bootstrap.servers", KAFKA_BROKER) \
-#     .option("topic", "aggregated-stream-metrics") \
-#     .option("checkpointLocation", "/tmp/spark-checkpoints/aggregated-metrics") \ # MUST set checkpoint location for Kafka sink
-#     .outputMode("update") \
-#     .trigger(processingTime=PROCESSING_INTERVAL) \
-#     .start()
-
-print("Output query started. Waiting for termination...")
+print("🚀 Streaming query started (console sink).")
 query.awaitTermination()
-print("Streaming query terminated.")
