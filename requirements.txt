@@ -1,0 +1,5 @@
+kafka-python==2.1.5
+mysql-connector-python==9.3.0
+mysqlclient==2.2.7
+py4j==0.10.9.7
+pyspark==3.5.5
