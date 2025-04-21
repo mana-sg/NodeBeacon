@@ -21,14 +21,25 @@ KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
 KAFKA_CHAT_TOPIC = os.getenv('KAFKA_CHAT_TOPIC', 'chat')
 CHAT_SERVER_HOST = os.getenv('CHAT_SERVER_HOST', '0.0.0.0')
 CHAT_SERVER_PORT = int(os.getenv('CHAT_SERVER_PORT', 5003))
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000")
+#ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000")
 HISTORY_LIMIT = int(os.getenv('CHAT_HISTORY_LIMIT', 100)) # Max messages to fetch
+
+raw_origins = os.getenv('ALLOWED_ORIGINS', '["http://localhost:3000", "http://192.168.2.3:3000"]')
+
+try:
+    # Try to parse as JSON list
+    ALLOWED_ORIGINS = json.loads(raw_origins)
+    if isinstance(ALLOWED_ORIGINS, str):
+        ALLOWED_ORIGINS = [ALLOWED_ORIGINS]
+except json.JSONDecodeError:
+    # Fallback: comma-separated string
+    ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins.split(',')]
 
 # --- MySQL Configuration (for reading history) ---
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
 MYSQL_PORT = int(os.getenv('MYSQL_PORT', 3306))
 MYSQL_USER = os.getenv('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'aneesh200') # Use your actual password
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '-') # Use your actual password
 MYSQL_DB = os.getenv('MYSQL_DB', 'chat_app_db')
 MYSQL_CHAT_TABLE = 'chat_messages'
 

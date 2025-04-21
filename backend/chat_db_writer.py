@@ -18,7 +18,7 @@ KAFKA_CHAT_TOPIC = os.getenv('KAFKA_CHAT_TOPIC', 'chat')
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
 MYSQL_PORT = int(os.getenv('MYSQL_PORT', 3306))
 MYSQL_USER = os.getenv('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'aneesh200') # Use your actual password
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '-') # Use your actual password
 MYSQL_DB = os.getenv('MYSQL_DB', 'chat_app_db')
 MYSQL_CHAT_TABLE = 'chat_messages'
 

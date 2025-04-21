@@ -6,9 +6,9 @@ import ViewPage from './pages/ViewPage';
 import './App.css';
 
 // Make sure these URLs are correct for your setup
-const PRODUCER_URL = process.env.REACT_APP_PRODUCER_URL || 'http://localhost:5001';
-const VIDEO_SERVER_URL = process.env.REACT_APP_VIDEO_SERVER_URL || 'http://localhost:5002'; // This is the consumer server
-const CHAT_SERVER_URL = process.env.REACT_APP_CHAT_SERVER_URL || 'http://localhost:5003'; // If you add chat back later
+const PRODUCER_URL = process.env.REACT_APP_PRODUCER_URL || 'http://192.168.2.3:5001';
+const VIDEO_SERVER_URL = process.env.REACT_APP_VIDEO_SERVER_URL || 'http://192.168.2.3:5002'; // This is the consumer server
+const CHAT_SERVER_URL = process.env.REACT_APP_CHAT_SERVER_URL || 'http://192.168.2.3:5003'; // If you add chat back later
 
 function App() {
   return (

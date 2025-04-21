@@ -6,6 +6,7 @@ import numpy as np
 import time
 import threading
 import os
+import json
 from flask import Flask
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
@@ -23,7 +24,19 @@ KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
 KAFKA_TOPIC = os.getenv('KAFKA_TOPIC', 'video-stream')
 PRODUCER_HOST = os.getenv('PRODUCER_HOST', '0.0.0.0') # Listen on all interfaces
 PRODUCER_PORT = int(os.getenv('PRODUCER_PORT', 5001)) # Specific port for producer control
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000") # React dev server default
+#ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000") # React dev server default
+
+raw_origins = os.getenv('ALLOWED_ORIGINS', '["http://localhost:3000", "http://192.168.2.3:3000"]')
+
+try:
+    # Try to parse as JSON list
+    ALLOWED_ORIGINS = json.loads(raw_origins)
+    if isinstance(ALLOWED_ORIGINS, str):
+        ALLOWED_ORIGINS = [ALLOWED_ORIGINS]
+except json.JSONDecodeError:
+    # Fallback: comma-separated string
+    ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins.split(',')]
+
 VIDEO_SOURCE = os.getenv('VIDEO_SOURCE', '0') # Keep as string for potential file paths
 try:
     VIDEO_SOURCE_INT = int(VIDEO_SOURCE)

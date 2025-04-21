@@ -20,15 +20,26 @@ from engineio.payload import Payload
 Payload.max_decode_packets = 500 # Adjust if needed
 
 # --- Configuration ---
-KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
+KAFKA_BROKER = os.getenv('KAFKA_BROKER', '192.168.2.3:9092')
 KAFKA_VIDEO_TOPIC = os.getenv('KAFKA_TOPIC', 'video-stream')
 KAFKA_METRICS_TOPIC = os.getenv('KAFKA_METRICS_TOPIC', 'stream-metrics') # NEW Metrics Topic
 CONSUMER_HOST = os.getenv('CONSUMER_HOST', '0.0.0.0')
 CONSUMER_PORT = int(os.getenv('CONSUMER_PORT', 5002))
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', "http://localhost:3000")
+#ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '["http://localhost:3000", "http://192.168.2.3:3000"]')
 FRONTEND_BUILD_DIR = os.getenv('FRONTEND_BUILD_DIR', '../frontend/build')
 METRICS_INTERVAL_SEC = int(os.getenv('METRICS_INTERVAL_SEC', 5)) # How often to calculate/send metrics
-METRICS_LATENCY_WINDOW = int(os.getenv('METRICS_LATENCY_WINDOW', 30)) # Number of frames for rolling latency avg
+METRICS_LATENCY_WINDOW = int(os.getenv('METRICS_LATENCY_WINDOW', 30))  #Number of frames for rolling latency avg
+
+raw_origins = os.getenv('ALLOWED_ORIGINS', '["http://localhost:3000", "http://192.168.2.3:3000"]')
+
+try:
+    # Try to parse as JSON list
+    ALLOWED_ORIGINS = json.loads(raw_origins)
+    if isinstance(ALLOWED_ORIGINS, str):
+        ALLOWED_ORIGINS = [ALLOWED_ORIGINS]
+except json.JSONDecodeError:
+    # Fallback: comma-separated string
+    ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins.split(',')]
 
 # --- Flask App & SocketIO Setup ---
 app = Flask(__name__, static_folder=FRONTEND_BUILD_DIR, static_url_path='/')
