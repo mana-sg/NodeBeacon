@@ -20,7 +20,7 @@ from engineio.payload import Payload
 Payload.max_decode_packets = 500 # Adjust if needed
 
 # --- Configuration ---
-KAFKA_BROKER = os.getenv('KAFKA_BROKER', '192.168.2.3:9092')
+KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
 KAFKA_VIDEO_TOPIC = os.getenv('KAFKA_TOPIC', 'video-stream')
 KAFKA_METRICS_TOPIC = os.getenv('KAFKA_METRICS_TOPIC', 'stream-metrics') # NEW Metrics Topic
 CONSUMER_HOST = os.getenv('CONSUMER_HOST', '0.0.0.0')

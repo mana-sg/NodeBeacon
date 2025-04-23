@@ -16,7 +16,7 @@ KAFKA_METRICS_TOPIC = os.getenv('KAFKA_METRICS_TOPIC', 'stream-metrics')
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
 MYSQL_PORT = int(os.getenv('MYSQL_PORT', 3306))
 MYSQL_USER = os.getenv('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '-')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'm6a2n6a2s7')
 MYSQL_DB = os.getenv('MYSQL_DB', 'chat_app_db')
 MYSQL_METRICS_TABLE = 'stream_metrics_v2'
 
